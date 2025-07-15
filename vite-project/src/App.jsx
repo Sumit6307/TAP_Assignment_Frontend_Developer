@@ -4,6 +4,7 @@ import PoiCard from './components/PoiCard';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
 
+// Nearby Explorer: Find nearby points of interest using real Overpass API
 const App = () => {
   const [userLocation, setUserLocation] = useState(null);
   const [pointsOfInterest, setPointsOfInterest] = useState([]);
@@ -11,28 +12,51 @@ const App = () => {
   const [error, setError] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
 
-  // Fallback POIs if API fails or returns no results
-  const fallbackPOIs = (lat, lng) => [
-    { id: 'fallback1', name: 'Sample Cafe', lat: lat + 0.001, lng: lng + 0.001, type: 'cafe', description: 'A cozy coffee shop.' },
-    { id: 'fallback2', name: 'Sample Park', lat: lat - 0.001, lng: lng - 0.002, type: 'park', description: 'A relaxing green space.' },
-  ];
+  // Geolocation API: Get user's current location
+  // Reference: https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API
+  useEffect(() => {
+    if (navigator.geolocation) {
+      setLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log('Geolocation API success:', { latitude, longitude });
+          setUserLocation({ lat: latitude, lng: longitude });
+          setLoading(false);
+        },
+        (err) => {
+          console.error('Geolocation API error:', err.message);
+          setError('Unable to retrieve location. Please enable location services.');
+          setLoading(false);
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+      );
+    } else {
+      console.error('Geolocation API not supported');
+      setError('Geolocation not supported by this browser.');
+    }
+  }, []);
 
-  // Fetch POIs using Overpass API (real API)
+  // Fetch POIs using real Overpass API (no dummy data)
   const fetchPOIs = async (lat, lng) => {
     try {
+      // Query all amenities within 5km for broader results
       const query = `
-        [out:json];
+        [out:json][timeout:25];
         node
           ["amenity"]
-          (around:1000,${lat},${lng});
+          (around:5000,${lat},${lng});
         out body;
       `;
       const response = await fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
         body: query,
       });
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
       const data = await response.json();
-      console.log('Overpass API response:', data); // Debug log
+      console.log('Overpass API response:', data);
       const pois = data.elements.map((node) => ({
         id: node.id,
         name: node.tags.name || node.tags.amenity || 'Unnamed Place',
@@ -41,50 +65,31 @@ const App = () => {
         type: node.tags.amenity || 'unknown',
         description: node.tags.description || `A ${node.tags.amenity || 'place'} near you.`,
       }));
-      return pois.length > 0 ? pois : fallbackPOIs(lat, lng);
+      if (pois.length === 0) {
+        setError('No amenities found within 5km. Try a different location.');
+      }
+      return pois;
     } catch (err) {
-      console.error('Overpass API error:', err);
-      setError('Failed to fetch points of interest. Showing fallback data.');
-      return fallbackPOIs(lat, lng);
+      console.error('Overpass API error:', err.message);
+      setError('Failed to fetch places from Overpass API.');
+      return [];
     }
   };
-
-  // Geolocation API
-  useEffect(() => {
-    if (navigator.geolocation) {
-      setLoading(true);
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          console.log('User location:', { latitude, longitude }); // Debug log
-          setUserLocation({ lat: latitude, lng: longitude });
-          setLoading(false);
-        },
-        (err) => {
-          setError('Unable to retrieve location. Please enable location services.');
-          setLoading(false);
-          // Use a default location for testing
-          setUserLocation({ lat: 12.9716, lng: 77.5946 }); // Bangalore, India
-        },
-        { timeout: 10000 }
-      );
-    } else {
-      setError('Geolocation is not supported by this browser.');
-      setUserLocation({ lat: 12.9716, lng: 77.5946 }); // Fallback location
-    }
-  }, []);
 
   // Fetch POIs when location is available
   useEffect(() => {
     if (userLocation) {
+      setLoading(true);
       fetchPOIs(userLocation.lat, userLocation.lng).then((pois) => {
-        console.log('Fetched POIs:', pois); // Debug log
+        console.log('Fetched POIs:', pois);
         setPointsOfInterest(pois);
+        setLoading(false);
       });
     }
   }, [userLocation]);
 
   // Background Tasks API: Schedule periodic distance updates
+  // Reference: https://developer.mozilla.org/en-US/docs/Web/API/Background_Tasks_API
   useEffect(() => {
     const updateDistances = () => {
       if (userLocation && pointsOfInterest.length > 0) {
@@ -108,17 +113,20 @@ const App = () => {
       return (R * c) / 1000; // Distance in kilometers
     };
 
+    let idleCallbackId;
     const scheduleUpdate = () => {
       if (window.requestIdleCallback) {
-        requestIdleCallback(
+        idleCallbackId = requestIdleCallback(
           () => {
+            console.log('Background Tasks API: Updating distances');
             updateDistances();
             scheduleUpdate();
           },
           { timeout: 5000 }
         );
       } else {
-        // Fallback for browsers without requestIdleCallback
+        // Fallback for unsupported browsers
+        console.log('Background Tasks API not supported, using setTimeout');
         setTimeout(() => {
           updateDistances();
           scheduleUpdate();
@@ -128,8 +136,8 @@ const App = () => {
 
     scheduleUpdate();
     return () => {
-      if (window.cancelIdleCallback) {
-        window.cancelIdleCallback(scheduleUpdate);
+      if (window.cancelIdleCallback && idleCallbackId) {
+        cancelIdleCallback(idleCallbackId);
       }
     };
   }, [userLocation, pointsOfInterest]);
@@ -157,8 +165,8 @@ const App = () => {
           </div>
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold text-gray-800">Nearby Places</h2>
-            {pointsOfInterest.length === 0 && (
-              <p className="text-gray-500">No places found nearby.</p>
+            {pointsOfInterest.length === 0 && !loading && (
+              <p className="text-gray-500">No places found nearby. Try a different location.</p>
             )}
             {pointsOfInterest.map((poi) => (
               <PoiCard key={poi.id} poi={poi} isSelected={selectedPoi?.id === poi.id} />

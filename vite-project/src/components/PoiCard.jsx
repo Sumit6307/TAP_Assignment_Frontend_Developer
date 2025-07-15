@@ -1,16 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 
+// PoiCard: Displays individual point of interest with lazy-loaded details
 const PoiCard = ({ poi, isSelected }) => {
   const cardRef = useRef(null);
 
-  // Intersection Observer API
+  // Intersection Observer API: Lazy-load additional details when card is visible
+  // Reference: https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            console.log(`Fetching additional details for ${poi.name}`);
-            // In a real app, fetch more details from an API here
+            console.log(`Intersection Observer API: Fetching details for ${poi.name}`);
+            // In a real app, fetch additional details (e.g., photos, reviews) here
           }
         });
       },

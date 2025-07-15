@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+// MapCanvas: Renders an interactive map using Canvas API
 const MapCanvas = ({ userLocation, pointsOfInterest, setSelectedPoi }) => {
   const canvasRef = useRef(null);
   const [zoom, setZoom] = useState(1);
 
+  // Canvas API: Draw map with user location and POIs
+  // Reference: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas && userLocation) {
