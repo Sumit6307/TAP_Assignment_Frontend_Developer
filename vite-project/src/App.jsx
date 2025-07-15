@@ -40,12 +40,14 @@ const App = () => {
   // Fetch POIs using real Overpass API (no dummy data)
   const fetchPOIs = async (lat, lng) => {
     try {
-      // Query all amenities within 5km for broader results
+      // Query amenities, shops, and tourism nodes within 5km
       const query = `
         [out:json][timeout:25];
-        node
-          ["amenity"]
-          (around:5000,${lat},${lng});
+        (
+          node["amenity"](around:5000,${lat},${lng});
+          node["shop"](around:5000,${lat},${lng});
+          node["tourism"](around:5000,${lat},${lng});
+        );
         out body;
       `;
       const response = await fetch('https://overpass-api.de/api/interpreter', {
@@ -59,14 +61,14 @@ const App = () => {
       console.log('Overpass API response:', data);
       const pois = data.elements.map((node) => ({
         id: node.id,
-        name: node.tags.name || node.tags.amenity || 'Unnamed Place',
+        name: node.tags.name || node.tags.amenity || node.tags.shop || node.tags.tourism || 'Unnamed Place',
         lat: node.lat,
         lng: node.lon,
-        type: node.tags.amenity || 'unknown',
-        description: node.tags.description || `A ${node.tags.amenity || 'place'} near you.`,
+        type: node.tags.amenity || node.tags.shop || node.tags.tourism || 'unknown',
+        description: node.tags.description || `A ${node.tags.amenity || node.tags.shop || node.tags.tourism || 'place'} near you.`,
       }));
       if (pois.length === 0) {
-        setError('No amenities found within 5km. Try a different location.');
+        setError('No places found within 5km. Try a different location or broaden the search.');
       }
       return pois;
     } catch (err) {
